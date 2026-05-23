@@ -66,13 +66,7 @@ export default function registerSocketHandlers(io, socket) {
   let currentRoom = null;
   let currentUser = null;
 
-  socket.on("createRoom", () => {
-    const newRoomId = uuidv4();
-    // createRoom is async, but we don't need to wait for client response
-    roomManager.createRoom(newRoomId).then(() => {
-      socket.emit("roomCreated", newRoomId);
-    });
-  });
+
 
   socket.on("join", async ({
     roomId,
@@ -87,27 +81,13 @@ export default function registerSocketHandlers(io, socket) {
       await handleLeave();
     }
 
-    // Ensure room exists and username is free
-    const added = await roomManager.addUser(roomId, username);
-    if (!added) {
-      socket.emit("joinError", {
-        message: "Username already in use in this room. Please choose a different name."
-      });
-      return;
-    }
-
     currentRoom = roomId;
     currentUser = username;
     socket.join(roomId);
 
     const roomData = await roomManager.getRoomData(roomId);
-    socket.emit("codeInputUpdate", roomData.input);
-    socket.emit("codeUpdate", roomData.code);
-    socket.emit("languageUpdate", roomData.language);
-    socket.emit("codeOutput", roomData.output);
-
     io.to(roomId).emit("userJoined", roomData.users);
-    console.log(`User ${username} joined room ${roomId}`);
+    console.log(`User ${username} connected socket to room ${roomId}`);
   });
 
   socket.on("leaveRoom", async () => {

@@ -55,11 +55,6 @@ function EditorPage() {
       return;
     }
 
-    ensureSocketConnected(socket, 5000).catch((err) => {
-      console.error("Socket connect error:", err);
-      toast.error("Backend connection failed. Please start backend and refresh.");
-    });
-
     const onUserJoined = (nextUsers) => setUsers(nextUsers);
     const onUserLeft = (nextUsers) => setUsers(nextUsers);
     const onTyping = (username) => {
@@ -90,27 +85,53 @@ function EditorPage() {
       setOutputLoading(false);
     };
 
-    socket.on("userJoined", onUserJoined);
-    socket.on("userLeft", onUserLeft);
-    socket.on("userTyping", onTyping);
-    socket.on("codeUpdate", onCodeUpdate);
-    socket.on("languageUpdate", onLanguageUpdate);
-    socket.on("codeInputUpdate", onCodeInputUpdate);
-    socket.on("codeOutput", onCodeOutput);
-    socket.on("codeExecutionStarted", onExecStarted);
-    socket.on("codeExecutionEnded", onExecEnded);
-    socket.on("codeExecutionBusy", onExecBusy);
-    socket.on("codeResponse", onCodeResponse);
+    const initRoom = async () => {
+      try {
+        const baseUrl = (import.meta.env.VITE_BACKEND_URL || "/").replace(/\/?$/, "/");
+        const resp = await fetch(`${baseUrl}join-room`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId: currentRoom, username: currentUser })
+        });
+        
+        const data = await resp.json();
+        
+        if (!resp.ok) {
+          toast.error(data.error || "Failed to join room");
+          navigate("/join", { replace: true, state: { roomId: currentRoom } });
+          return;
+        }
 
-    // duplicate username or other join failures
-    const onJoinError = (payload) => {
-      toast.error(payload?.message || "Failed to join room");
-      // kick user back to join page so they can pick a different name
-      navigate("/join", { replace: true, state: { roomId: currentRoom } });
+        const roomData = data.roomData;
+        setCode(roomData.code);
+        setCodeInput(roomData.input);
+        setLanguage(roomData.language);
+        setOutput(roomData.output);
+        setUsers(roomData.users);
+
+        await ensureSocketConnected(socket, 5000);
+        
+        socket.on("userJoined", onUserJoined);
+        socket.on("userLeft", onUserLeft);
+        socket.on("userTyping", onTyping);
+        socket.on("codeUpdate", onCodeUpdate);
+        socket.on("languageUpdate", onLanguageUpdate);
+        socket.on("codeInputUpdate", onCodeInputUpdate);
+        socket.on("codeOutput", onCodeOutput);
+        socket.on("codeExecutionStarted", onExecStarted);
+        socket.on("codeExecutionEnded", onExecEnded);
+        socket.on("codeExecutionBusy", onExecBusy);
+        socket.on("codeResponse", onCodeResponse);
+        
+        socket.emit("join", { roomId: currentRoom, username: currentUser });
+
+      } catch (err) {
+        console.error("Connection error:", err);
+        toast.error("Backend connection failed. Please start backend and refresh.");
+      }
     };
-    socket.on("joinError", onJoinError);
-
-    socket.emit("join", { roomId: currentRoom, username: currentUser });
+    
+    initRoom();
 
     return () => {
       socket.off("userJoined", onUserJoined);
@@ -124,7 +145,6 @@ function EditorPage() {
       socket.off("codeExecutionEnded", onExecEnded);
       socket.off("codeExecutionBusy", onExecBusy);
       socket.off("codeResponse", onCodeResponse);
-      socket.off("joinError", onJoinError);
     };
   }, [currentRoom, currentUser, navigate, socket]);
 

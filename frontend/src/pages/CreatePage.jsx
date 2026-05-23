@@ -18,32 +18,29 @@ function CreatePage() {
     localStorage.setItem("cc_username", username);
 
     try {
-      await ensureSocketConnected(socket, 4000);
+      const baseUrl = (import.meta.env.VITE_BACKEND_URL || "/").replace(/\/?$/, "/");
+      const resp = await fetch(`${baseUrl}create-room`, {
+        method: "POST"
+      });
 
-      const onRoomCreated = (roomId) => {
-        if (roomCreatedTimeoutRef.current) clearTimeout(roomCreatedTimeoutRef.current);
-        socket.off("roomCreated", onRoomCreated);
+      if (!resp.ok) {
+        throw new Error("Failed to create room");
+      }
 
-        if (!roomId) {
-          toast.error("Failed to create room.");
-          setCreating(false);
-          return;
-        }
+      const data = await resp.json();
+      const roomId = data.roomId;
 
-        navigate(`/room/${roomId}`);
-      };
-
-      socket.on("roomCreated", onRoomCreated);
-      socket.emit("createRoom");
-
-      roomCreatedTimeoutRef.current = setTimeout(() => {
-        socket.off("roomCreated", onRoomCreated);
-        toast.error("server is not responding. Please try again.");
+      if (!roomId) {
+        toast.error("Failed to create room.");
         setCreating(false);
-      }, 5000);
+        return;
+      }
+
+      if (!socket.connected) socket.connect();
+      navigate(`/room/${roomId}`);
     } catch (err) {
       console.error(err);
-      toast.error("server connection failed. Please start server and try again.");
+      toast.error("Server connection failed. Please start server and try again.");
       setCreating(false);
     }
   };
